@@ -1,0 +1,25 @@
+pipeline {
+    agent any 
+    stages {
+        stage ('clone') {
+            steps {
+               git branch: 'main', credentialsId: '59397ac7-59e9-456a-ad83-4752f8059d24', url: 'https://github.com/7gowda/new_repo.git'
+            }
+        }
+        stage ('build') {
+            steps {
+                sh "mvn clean install"
+            }
+        }
+        stage (image) {
+            steps {
+                sh "docker build -t demo ."
+            }
+        }
+        stage ('container') {
+            steps {
+                sh "docker run -itd -p 8081:8080 demo"
+            }
+        }
+    }
+}
