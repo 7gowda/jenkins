@@ -1,0 +1,76 @@
+pipeline {
+    agent any
+
+    stages {
+        stage ('Clone') {
+            steps {
+                git branch: 'main', credentialsId: '59397ac7-59e9-456a-ad83-4752f8059d24', url: 'https://github.com/7gowda/new_repo.git'
+            }
+        }
+        stage ("build") {
+            steps {
+                sh "mvn clean install"
+            }
+        }
+        stage ("code_quality") {
+            steps {
+               withSonarQubeEnv('SonarQube') {
+                   sh 'mvn clean package sonar:sonar -Dsonar.projectKey=maven_03 -Dsonar.host.url=http://13.59.229.253:9000 -Dsonar.login=f7987e163ead4a90dba74ddc92c3d65ecf08a4ec'
+               }
+            }
+        }
+        stage ('Upload file') {
+            steps {
+                rtUpload (
+                    // Obtain an Artifactory server instance, defined in Jenkins --> Manage Jenkins --> Configure System:
+                    serverId: "artifactory",
+                    spec: """{
+                            "files": [
+                                    {
+                                        "pattern": "/var/lib/jenkins/workspace/jfrog_artifactory/target/hello-world-war-1.0.0.war",
+                                        "target": "libs-snapshot-local"
+                                    }
+                                ]
+                            }"""
+                )
+            }
+        }
+
+        stage ('Publish build info') {
+            steps {
+                rtPublishBuildInfo (
+                    serverId: "artifactory",
+                )
+            }
+        }
+
+        stage ('Set output resources') {
+            steps {
+                // 'jfPipelines' step will be skipped if the build is not triggered by JFrog Pipelines.
+                jfPipelines(
+                    /**
+                    * Sets the output resources to send to JFrog Pipelines.
+                    * 'pipelinesBuildInfo' is the build-info resource defined in JFrog Pipelines.
+                    */
+                    outputResources: """[
+                        {
+                            "name": "pipelinesBuildInfo",
+                            "content": {
+                                "buildName": "${env.JOB_NAME}",
+                                "buildNumber": "${env.BUILD_NUMBER}"
+                            }
+                        }
+                    ]"""
+                )
+            }
+        }
+        stage ('tomat_deploy') {
+            steps {
+                sshagent(credentials: ['07tomcat'], ignoreMissing: true) {
+                    //sh 'chown ubuntu@3.139.81.222:-R tomcat.tomcat /opt/tomcat/webapp'
+                    sh 'scp -o StrictHostKeyChecking=no target/hello-world-war-1.0.0.war ubuntu@3.131.90.203:/opt/ubuntu/webapps'
+                }
+            }
+        }    
+    }
+}
